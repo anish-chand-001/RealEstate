@@ -13,9 +13,9 @@
 
   const authRouter = express.Router();
 
-  // ==========================================
+  // ====================================
   // PUBLIC ROUTES (No login required)
-  // ==========================================
+  // =====================================
   authRouter.post("/register", registerUser);
   authRouter.post("/login", loginUser);
   authRouter.post("/verify-email", verifyEmail);
