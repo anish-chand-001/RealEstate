@@ -1,0 +1,94 @@
+paths:
+  /api/users/profile:
+    get:
+      summary: Get current logged-in user profile
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully retrieved user profile (passwords excluded)
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '404':
+          description: User not found
+        '500':
+          description: Server Error
+
+    put:
+      summary: Update current logged-in user profile (supports profile image upload & removal)
+      tags:
+        - Users
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: Anish Chand
+                phone:
+                  type: string
+                  example: '9876543210'
+                address:
+                  type: string
+                  example: Sector 62, Noida
+                removeProfileImage:
+                  type: string
+                  enum: ['true', 'false']
+                  description: Set to 'true' to clear the profile image
+                profileImage:
+                  type: string
+                  format: binary
+                  description: Single profile picture image file upload via Multer
+      responses:
+        '200':
+          description: Profile updated successfully
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
+        '500':
+          description: Server Error
+
+  /api/users/public/{id}:
+    get:
+      summary: Get a public user profile by ID (restricted fields)
+      tags:
+        - Users
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB User ObjectId
+      responses:
+        '200':
+          description: Successfully fetched limited public fields (name, profileImage, role, createdAt)
+        '404':
+          description: User not found
+        '500':
+          description: Server Error
+
+  /api/users/getAllUsers:
+    get:
+      summary: Get all users (Admin only)
+      tags:
+        - Users (Admin)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully retrieved list of all users
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin role required
+        '500':
+          description: Server Error

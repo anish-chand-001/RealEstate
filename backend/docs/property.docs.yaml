@@ -1,0 +1,325 @@
+paths:
+  /api/property:
+    get:
+      summary: Get all properties with advanced filters, sorting, search, and pagination
+      tags:
+        - Properties
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Keyword search matching title or area
+        - in: query
+          name: city
+          schema:
+            type: string
+          description: Filter properties by city
+        - in: query
+          name: state
+          schema:
+            type: string
+          description: Filter properties by state
+        - in: query
+          name: propertyType
+          schema:
+            type: string
+            enum: [Apartment, House, Villa, Commercial, Land, Office, Shop, Warehouse, Other]
+          description: Filter by property classification
+        - in: query
+          name: minPrice
+          schema:
+            type: number
+          description: Minimum price filter
+        - in: query
+          name: maxPrice
+          schema:
+            type: number
+          description: Maximum price filter
+        - in: query
+          name: bhk
+          schema:
+            type: integer
+          description: Minimum BHK count required
+        - in: query
+          name: furnished
+          schema:
+            type: string
+            enum: [Furnished, Semi-Furnished, Unfurnished]
+          description: Furnishing status filter
+        - in: query
+          name: amenities
+          schema:
+            type: string
+          description: Comma-separated list of required amenities (e.g., Gym,Swimming Pool)
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [price_asc, price_desc, most_viewed, oldest]
+          description: Sorting preference
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Number of items per page
+      responses:
+        '200':
+          description: Successfully retrieved list of filtered properties
+        '500':
+          description: Server Error
+
+    post:
+      summary: Add a new property listing with image uploads (Seller Role Required)
+      tags:
+        - Properties
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - title
+                - description
+                - propertyType
+                - price
+                - address
+                - features
+                - images
+              properties:
+                title:
+                  type: string
+                  example: Luxury Villa with Pool
+                description:
+                  type: string
+                  example: A very spacious and modern villa located in a prime gated society.
+                propertyType:
+                  type: string
+                  enum: [Apartment, House, Villa, Commercial, Land, Office, Shop, Warehouse, Other]
+                  example: Villa
+                price:
+                  type: number
+                  example: 12500000
+                'address[area]':
+                  type: string
+                  example: Banjara Hills
+                'address[city]':
+                  type: string
+                  example: Hyderabad
+                'address[state]':
+                  type: string
+                  example: Telangana
+                'address[pinCode]':
+                  type: string
+                  example: '500034'
+                'features[bhk]':
+                  type: integer
+                  example: 4
+                'features[bathrooms]':
+                  type: integer
+                  example: 5
+                'features[area]':
+                  type: number
+                  example: 3200
+                'features[furnished]':
+                  type: string
+                  enum: [Furnished, Semi-Furnished, Unfurnished]
+                  example: Furnished
+                amenities:
+                  type: string
+                  description: JSON string array or comma list of amenities
+                  example: '["Swimming Pool", "Gym", "24/7 Security"]'
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+                  description: Up to 10 property image files via Multer
+      responses:
+        '201':
+          description: Property added successfully
+        '400':
+          description: Missing required fields
+        '401':
+          description: Unauthorized token missing
+        '403':
+          description: Forbidden - Insufficient role permissions
+        '500':
+          description: Server Error
+
+  /api/property/count/by-type:
+    get:
+      summary: Get available property counts grouped by type (Public Badge Stats)
+      tags:
+        - Properties
+      responses:
+        '200':
+          description: Successfully fetched key-value count mapping dictionary
+        '500':
+          description: Server Error
+
+  /api/property/seller/dashboard:
+    get:
+      summary: Get analytics, aggregate counters, and listings for the logged-in seller
+      tags:
+        - Properties (Seller)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully retrieved seller dashboard analytics and property items
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Seller role check failed
+        '500':
+          description: Server Error
+
+  /api/property/my-properties:
+    get:
+      summary: Get all properties listed exclusively by the authenticated seller
+      tags:
+        - Properties (Seller)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully fetched seller's properties array
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '500':
+          description: Server Error
+
+  /api/property/{id}:
+    get:
+      summary: Get single property details by ID, increment unique view count, and fetch similar properties
+      tags:
+        - Properties
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId
+      responses:
+        '200':
+          description: Successfully fetched property details with similar recommendations
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
+
+    put:
+      summary: Update a property listing including image retention and cloud sync (Owner Only)
+      tags:
+        - Properties (Seller)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                price:
+                  type: number
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Property updated successfully
+        '403':
+          description: Not authorized to update this property
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
+
+    delete:
+      summary: Delete a property listing and wipe linked Cloudinary assets (Owner Only)
+      tags:
+        - Properties (Seller)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId
+      responses:
+        '200':
+          description: Property deleted successfully
+        '403':
+          description: Not authorized to delete property
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
+
+  /api/property/{id}/status:
+    patch:
+      summary: Update property listing lifecycle status (e.g., Available, Sold, Rented, Pending)
+      tags:
+        - Properties (Seller)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [Available, Sold, Rented, Pending]
+                  example: Sold
+      responses:
+        '200':
+          description: Property status successfully updated
+        '400':
+          description: Missing status field
+        '403':
+          description: Not authorized
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
