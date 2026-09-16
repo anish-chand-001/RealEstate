@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Real Estate API - Wishlist Module
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+tags:
+  - name: Wishlist
+    description: Operations related to managing saved properties in user wishlists
+
+paths:
+  /api/wishlist:
+    get:
+      summary: Get all wishlist items for the logged-in user
+      tags:
+        - Wishlist
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully retrieved user's wishlist with populated property details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 3
+                  wishlist:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '500':
+          description: Server Error
+
+  /api/wishlist/{propertyId}:
+    post:
+      summary: Add a property to the user's wishlist
+      tags:
+        - Wishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: propertyId
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId to wishlist
+      responses:
+        '201':
+          description: Property added to wishlist successfully
+        '400':
+          description: Bad Request (Property is already in wishlist or invalid request)
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '500':
+          description: Server Error
+
+    delete:
+      summary: Remove a property from the user's wishlist
+      tags:
+        - Wishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: propertyId
+          required: true
+          schema:
+            type: string
+          description: MongoDB Property ObjectId to remove from wishlist
+      responses:
+        '200':
+          description: Property removed from wishlist successfully
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '404':
+          description: Wishlist item not found
+        '500':
+          description: Server Error

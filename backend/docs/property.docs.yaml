@@ -312,6 +312,11 @@ paths:
                   type: string
                   enum: [Available, Sold, Rented, Pending]
                   example: Sold
+            examples:
+              statusUpdate:
+                summary: Example status update payload
+                value:
+                  status: "Sold"
       responses:
         '200':
           description: Property status successfully updated
@@ -321,5 +326,85 @@ paths:
           description: Not authorized
         '404':
           description: Property not found
+        '500':
+          description: Server Error
+
+  /api/inquiries:
+    post:
+      summary: Send an inquiry for a property (Authenticated User / Buyer)
+      tags:
+        - Inquiries
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - propertyId
+                - message
+              properties:
+                propertyId:
+                  type: string
+                  example: "65f1a2b3c4d5e6f7a8b9c0d1"
+                message:
+                  type: string
+                  example: "I am very interested in this property. Can we schedule a site visit this weekend?"
+            examples:
+              inquiryExample:
+                summary: Example inquiry payload
+                value:
+                  propertyId: "65f1a2b3c4d5e6f7a8b9c0d1"
+                  message: "I am very interested in this property. Can we schedule a site visit this weekend?"
+      responses:
+        '201':
+          description: Inquiry sent successfully to the seller
+        '400':
+          description: Missing message or self-inquiry attempt
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
+
+  /api/inquiries/seller/inquiries:
+    get:
+      summary: Get all inquiries received for the logged-in seller's properties
+      tags:
+        - Inquiries (Seller)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully fetched seller inquiries array
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Seller role required
+        '500':
+          description: Server Error
+
+  /api/inquiries/{id}/read:
+    patch:
+      summary: Mark a specific inquiry as read (Seller Owner Only)
+      tags:
+        - Inquiries (Seller)
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Inquiry ObjectId
+      responses:
+        '200':
+          description: Inquiry marked as read successfully
+        '403':
+          description: Not authorized to modify this inquiry
+        '404':
+          description: Inquiry not found
         '500':
           description: Server Error

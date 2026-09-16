@@ -1,0 +1,287 @@
+openapi: 3.0.3
+info:
+  title: Real Estate API - Admin Module
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+tags:
+  - name: Admin
+    description: Enterprise operations for platform administration, user moderation, approvals, and analytics
+
+paths:
+  /api/admin/analytics:
+    get:
+      summary: Get dashboard analytics, KPIs, property status breakdowns, and recent activity
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Dashboard analytics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Dashboard analytics retrieved successfully"
+                  data:
+                    type: object
+                    properties:
+                      kpis:
+                        type: object
+                        properties:
+                          totalUsers:
+                            type: integer
+                            example: 120
+                          totalProperties:
+                            type: integer
+                            example: 45
+                          totalInquiries:
+                            type: integer
+                            example: 85
+                      charts:
+                        type: object
+                        properties:
+                          propertyStatus:
+                            type: object
+                            properties:
+                              Available:
+                                type: integer
+                                example: 30
+                              Sold:
+                                type: integer
+                                example: 10
+                              Rented:
+                                type: integer
+                                example: 3
+                              Pending:
+                                type: integer
+                                example: 2
+                      recentActivity:
+                        type: object
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '403':
+          description: Forbidden - Admin role required
+        '500':
+          description: Server Error
+
+  /api/admin/users:
+    get:
+      summary: Get all users with advanced filtering, pagination, and sorting
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+          description: Page number for pagination
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          description: Number of items per page
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Fuzzy search term for name or email
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [buyer, seller, admin]
+          description: Filter users by exact role
+        - in: query
+          name: isBlocked
+          schema:
+            type: boolean
+          description: Filter by block status
+        - in: query
+          name: isVerified
+          schema:
+            type: boolean
+          description: Filter by email verification status
+        - in: query
+          name: isApproved
+          schema:
+            type: boolean
+          description: Filter by account approval status
+        - in: query
+          name: sort
+          schema:
+            type: string
+            default: "-createdAt"
+          description: Sorting criteria (e.g., name or -createdAt)
+      responses:
+        '200':
+          description: Users retrieved successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin role required
+        '500':
+          description: Server Error
+
+  /api/admin/users/pending-sellers:
+    get:
+      summary: Get all pending seller accounts waiting for admin approval
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: sort
+          schema:
+            type: string
+            default: "createdAt"
+      responses:
+        '200':
+          description: Pending seller accounts retrieved successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin role required
+        '500':
+          description: Server Error
+
+  /api/admin/inquiries:
+    get:
+      summary: Get all inquiries across the platform with filtering and pagination
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+        - in: query
+          name: status
+          schema:
+            type: string
+          description: Filter inquiries by status
+        - in: query
+          name: property
+          schema:
+            type: string
+          description: Filter by Property ID
+        - in: query
+          name: user
+          schema:
+            type: string
+          description: Filter by User ID
+      responses:
+        '200':
+          description: Inquiries retrieved successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - Admin role required
+        '500':
+          description: Server Error
+
+  /api/admin/users/{id}/block:
+    put:
+      summary: Toggle block or unblock status for a specific user
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB User ObjectId
+      responses:
+        '200':
+          description: User block status toggled successfully
+        '400':
+          description: Invalid User ID format
+        '403':
+          description: Action denied (Cannot block self or other admins)
+        '404':
+          description: User not found
+        '500':
+          description: Server Error
+
+  /api/admin/users/{id}/approve:
+    put:
+      summary: Approve a pending seller account
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB User ObjectId of the seller
+      responses:
+        '200':
+          description: Seller account successfully approved
+        '400':
+          description: Invalid User ID format or account already approved
+        '404':
+          description: User not found
+        '500':
+          description: Server Error
+
+  /api/admin/users/{id}:
+    delete:
+      summary: Permanently delete a user and cascade delete their properties and inquiries
+      tags:
+        - Admin
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB User ObjectId
+      responses:
+        '200':
+          description: User and associated records permanently deleted
+        '400':
+          description: Invalid User ID format
+        '403':
+          description: Action denied (Cannot delete active session or other admins)
+        '404':
+          description: User not found
+        '500':
+          description: Server Error

@@ -1,0 +1,107 @@
+openapi: 3.0.3
+info:
+  title: Real Estate API - Inquiries Module
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+tags:
+  - name: Inquiries
+    description: Operations related to property buyer inquiries and seller management
+
+paths:
+  /api/inquiry:
+    post:
+      summary: Send an inquiry for a property (Buyer only)
+      tags:
+        - Inquiries
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - propertyId
+                - message
+              properties:
+                propertyId:
+                  type: string
+                  example: "60d5ec49c123456789abcdef"
+                  description: MongoDB Object ID of the property being inquired about
+                message:
+                  type: string
+                  example: "I am interested in scheduling a site visit this weekend. Please contact me."
+                  description: Inquiry message details from the buyer
+      responses:
+        '201':
+          description: Inquiry sent successfully to the seller
+        '400':
+            description: Bad Request (Missing message or trying to inquire on own property)
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '403':
+          description: Forbidden - Buyer role required
+        '404':
+          description: Property not found
+        '500':
+          description: Server Error
+
+  /api/inquiry/seller/inquiries:
+    get:
+      summary: Get all inquiries received for the logged-in seller's properties
+      tags:
+        - Inquiries
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Successfully retrieved list of seller inquiries (includes populated buyer and property data)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  count:
+                    type: integer
+                    example: 2
+                  inquiries:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '403':
+          description: Forbidden - Seller role required
+        '500':
+          description: Server Error
+
+  /api/inquiry/{id}/read:
+    patch:
+      summary: Mark a specific inquiry as read (Seller only)
+      tags:
+        - Inquiries
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: MongoDB Inquiry ObjectId
+      responses:
+        '200':
+          description: Inquiry marked as read successfully
+        '401':
+          description: Unauthorized - Missing or invalid token
+        '403':
+          description: Forbidden - Not authorized to modify this inquiry or wrong role
+        '404':
+          description: Inquiry not found
+        '500':
+          description: Server Error

@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.0",
     "multer": "^2.3.0",
+    "nodemailer": "^10.0.10",
     "nodemon": "^3.1.14",
     "socket.io": "^4.8.3",
     "streamifier": "^0.1.1",

@@ -5,6 +5,10 @@ import swaggerSpec from './config/swagger.js';
 import authRouter from './routes/auth.routes.js';
 import userRouter from './routes/user.routes.js';
 import propertyRouter from './routes/property.routes.js';
+import inquiryRouter from './routes/inquiry.routes.js'
+import wishlistRouter from './routes/wishlist.routes.js';
+import contactRouter from './routes/contact.routes.js';
+import adminRouter from './routes/admin.routes.js';
 
 const app = express();
 
@@ -22,6 +26,10 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/property',propertyRouter)
+app.use('/api/inquiry',inquiryRouter)
+app.use('/api/wishlist',wishlistRouter)
+app.use('/api/contact',contactRouter)
+app.use('/api/admin',adminRouter)
 
 app.get('/health', (req, res) => {
   res.status(200).json({ 
