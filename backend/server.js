@@ -16,17 +16,25 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    methods:["GET","POST"],
     credentials: true,
   },
 });
 
-// io.on('connection', (socket) => {
-//   console.log(`⚡ Socket connected: ${socket.id}`);
-  
-//   socket.on('disconnect', () => {
-//     console.log(`❌ Socket disconnected: ${socket.id}`);
-//   });
-// });
+io.on('connection', (socket) => {
+  console.log(`⚡ Socket connected: ${socket.id}`);
+  socket.on('joinChat',(chatId) =>{
+    socket.join(chatId);
+  })
+
+  socket.on('sendMessage',(data) =>{
+    io.to(data.chatId).emit("receiveMessage",data);
+  })
+
+  socket.on('disconnect', () => {
+    console.log(`❌ Socket disconnected: ${socket.id}`);
+  });
+});
 
 // 4. Start Server
 const PORT = process.env.PORT || 5000;

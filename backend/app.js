@@ -9,11 +9,13 @@ import inquiryRouter from './routes/inquiry.routes.js'
 import wishlistRouter from './routes/wishlist.routes.js';
 import contactRouter from './routes/contact.routes.js';
 import adminRouter from './routes/admin.routes.js';
+import chatRouter from './routes/chat.routes.js';
+
 
 const app = express();
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
@@ -29,6 +31,7 @@ app.use('/api/property',propertyRouter)
 app.use('/api/inquiry',inquiryRouter)
 app.use('/api/wishlist',wishlistRouter)
 app.use('/api/contact',contactRouter)
+app.use('/api/chat',chatRouter)
 app.use('/api/admin',adminRouter)
 
 app.get('/health', (req, res) => {
