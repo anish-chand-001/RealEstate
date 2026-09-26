@@ -7,6 +7,8 @@ import {
   getDashboardAnalytics,
   getPendingSellers,
   approveSeller,
+  getAllProperties as getAllAdminProperties,
+  verifyProperty,
 } from '../controllers/admin.controller.js';
 
 // Import your authentication middlewares
@@ -34,6 +36,8 @@ adminRouter.get('/users/pending-sellers', getPendingSellers);
 adminRouter.get('/users', getAllUsers);
 
 adminRouter.get('/inquiries', getAllInquiries);
+adminRouter.get('/properties', getAllAdminProperties);
+adminRouter.patch('/properties/:id/verify', verifyProperty);
 
 adminRouter.put('/users/:id/block', toggleBlockUser);
 

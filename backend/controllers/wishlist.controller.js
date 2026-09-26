@@ -1,4 +1,6 @@
 import Wishlist from '../models/wishlist.model.js';
+import { getPagination } from '../utils/pagination.js';
+import { buildCursorPage, cursorPaginationMetadata } from '../utils/cursorPagination.js';
 
 /**
  * @desc    Add a property to the user's wishlist
@@ -57,21 +59,30 @@ export const getUserWishlist = async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
 
-    // Find wishlist items and populate the full property details (including images, price, title)
-    const wishlist = await Wishlist.find({ user: userId })
-      .populate({
-        path: 'property',
-        select: 'title description price propertyType address features images status',
-      })
-      .sort({ createdAt: -1 });
+    const filter = { user: userId };
+    const { page, limit } = getPagination(req.query);
+    const cursorPage = buildCursorPage({ filter, sortBy: { createdAt: -1 }, page, cursor: req.query.cursor, direction: req.query.direction, limit });
+    const [rawWishlist, total] = await Promise.all([
+      Wishlist.find(cursorPage.filter)
+        .populate({ path: 'property', select: 'title description price propertyType address features images status' })
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .lean(),
+      Wishlist.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawWishlist);
+    const wishlist = cursorPage.trim(rawWishlist);
+    const cursors = cursorPage.cursors(wishlist);
 
     res.status(200).json({
       success: true,
-      count: wishlist.length,
+      count: total,
       wishlist,
+      pagination: cursorPaginationMetadata({ page, limit, total, hasNextPage: page * limit < total, hasPrevPage: page > 1, ...cursors, ...(hasMore ? {} : { nextCursor: null }) }),
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error("Get user wishlist error:", error);
     res.status(500).json({
       success: false,

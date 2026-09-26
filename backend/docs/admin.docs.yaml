@@ -15,7 +15,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Dashboard analytics retrieved successfully
@@ -78,7 +78,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: query
           name: page
@@ -140,7 +140,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: query
           name: page
@@ -173,7 +173,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: query
           name: page
@@ -216,7 +216,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id
@@ -242,7 +242,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id
@@ -266,7 +266,7 @@ paths:
       tags:
         - Admin
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id

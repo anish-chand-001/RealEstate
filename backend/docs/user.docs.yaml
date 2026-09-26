@@ -5,7 +5,7 @@ paths:
       tags:
         - Users
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully retrieved user profile (passwords excluded)
@@ -21,7 +21,7 @@ paths:
       tags:
         - Users
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       requestBody:
         required: true
         content:
@@ -82,7 +82,7 @@ paths:
       tags:
         - Users (Admin)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully retrieved list of all users

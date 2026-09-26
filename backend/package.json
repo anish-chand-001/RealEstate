@@ -8,7 +8,9 @@
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "migrate:chat-messages": "node scripts/migrateChatMessages.js",
+    "db:ensure-indexes": "node scripts/ensureIndexes.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

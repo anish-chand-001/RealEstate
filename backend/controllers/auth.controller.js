@@ -4,6 +4,7 @@ import sendEmail from "../utils/sendEmail.js";
 import { generateVerificationEmail,generatePasswordResetEmail } from "../utils/emailTemplates.js";
 import jwt from "jsonwebtoken"; 
 import crypto from "crypto";
+import { AUTH_COOKIE_NAME, authCookieMaxAge, authCookieOptions, clearAuthCookie } from "../utils/authCookie.js";
 
 
 /**
@@ -15,10 +16,19 @@ import crypto from "crypto";
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
+    const requestedRole = req.body?.role ?? "buyer";
+    if (typeof name !== "string" || typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "Name, email, and password must be valid strings" });
+    }
+    if (!["buyer", "seller"].includes(requestedRole)) {
+      return res.status(400).json({ message: "Role must be buyer or seller" });
+    }
+    const role = requestedRole;
+    const normalizedEmail = email.trim().toLowerCase();
     
     // 1. Check if user already exists
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -27,14 +37,12 @@ export const registerUser = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     
     // 3. Generate 6-digit OTP
-    const verificationToken = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    const verificationToken = crypto.randomInt(100000, 1000000).toString();
 
     // 4. Create the user in the database (using hashedPassword!)
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword, 
       role,
       isApproved: role === "seller" ? false : true,
@@ -86,11 +94,11 @@ export const loginUser = async (req, res) => {
     const { email, password } = req.body;
     
     // Fail fast if inputs are missing
-    if (!email || !password) {
+    if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
       return res.status(400).json({ message: "Please provide email and password" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
@@ -125,11 +133,9 @@ export const loginUser = async (req, res) => {
     );
 
     // Send the token in an HTTP-only cookie for high security
-    res.cookie("token", token, {
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === "production", 
-      sameSite: "strict", 
-      maxAge: 7 * 24 * 60 * 60 * 1000, 
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      ...authCookieOptions(),
+      maxAge: authCookieMaxAge(),
     });
 
     res.status(200).json({
@@ -139,7 +145,6 @@ export const loginUser = async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
-        token: token,
       },
     });
   } catch (error) {
@@ -161,11 +166,11 @@ export const verifyEmail = async (req, res) => {
     // 1. Extract email and code from the request body
     const { email, code } = req.body;
 
-    if(!email || !code) {
+    if (typeof email !== "string" || typeof code !== "string" || !email || !/^\d{6}$/.test(code)) {
       return res.status(400).json({ message: "Email and verification code are required" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
     if (!user) {
       return res.status(400).json({ message: "Invalid email or code" });
@@ -205,11 +210,11 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
+    if (typeof email !== "string" || !email) {
       return res.status(400).json({ message: "Please provide an email" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
 
     if (!user) {
       return res.status(200).json({ 
@@ -221,7 +226,7 @@ export const forgotPassword = async (req, res) => {
     const resetToken = crypto.randomBytes(32).toString("hex");
     
     // 2. Save it to the database with a 1-hour expiration
-    user.passwordResetToken = resetToken;
+    user.passwordResetToken = crypto.createHash("sha256").update(resetToken).digest("hex");
     user.passwordResetExpires = Date.now() + 15*60*1000; // 15 minutes in milliseconds
     await user.save();
 
@@ -266,15 +271,19 @@ export const forgotPassword = async (req, res) => {
  */
 export const resetPassword = async (req, res) => {
   try {
-    const { token} = req.params;
+    const { token } = req.params;
+    if (typeof token !== "string" || !/^[a-f0-9]{64}$/i.test(token)) {
+      return res.status(400).json({ message: "Invalid or expired reset token" });
+    }
     const { newPassword } = req.body;
 
     if (!token || !newPassword) {
       return res.status(400).json({ message: "Token and new password are required" });
     }
 
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
     const user = await User.findOne({
-      passwordResetToken:token,
+      passwordResetToken: hashedToken,
       passwordResetExpires: { $gt: Date.now() },
     });
 
@@ -308,11 +317,7 @@ export const resetPassword = async (req, res) => {
 
 export const logoutUser = (req, res) => {
   try {
-    res.clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-    });
+    clearAuthCookie(res);
 
     res.status(200).json({ message: "Logout successful" });
   } catch (error) {

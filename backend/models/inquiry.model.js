@@ -32,6 +32,11 @@ const inquirySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+inquirySchema.index({ seller: 1, createdAt: -1, _id: -1 });
+inquirySchema.index({ createdAt: -1, _id: -1 });
+inquirySchema.index({ property: 1, createdAt: -1, _id: -1 });
+inquirySchema.index({ buyer: 1, createdAt: -1, _id: -1 });
+
 const Inquiry = mongoose.model('Inquiry', inquirySchema);
 
 export default Inquiry;     

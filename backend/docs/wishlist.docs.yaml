@@ -15,7 +15,7 @@ paths:
       tags:
         - Wishlist
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully retrieved user's wishlist with populated property details
@@ -45,7 +45,7 @@ paths:
       tags:
         - Wishlist
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: propertyId
@@ -68,7 +68,7 @@ paths:
       tags:
         - Wishlist
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: propertyId

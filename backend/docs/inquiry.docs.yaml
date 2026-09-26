@@ -15,7 +15,7 @@ paths:
       tags:
         - Inquiries
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       requestBody:
         required: true
         content:
@@ -54,7 +54,7 @@ paths:
       tags:
         - Inquiries
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully retrieved list of seller inquiries (includes populated buyer and property data)
@@ -86,7 +86,7 @@ paths:
       tags:
         - Inquiries
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id

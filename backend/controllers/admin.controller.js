@@ -1,6 +1,21 @@
 import User from "../models/user.model.js" 
 import Property from "../models/property.model.js"
 import Inquiry from "../models/inquiry.model.js"
+import mongoose from "mongoose"
+import Wishlist from "../models/wishlist.model.js"
+import { Chat } from "../models/chat.model.js"
+import ChatMessage from "../models/chatMessage.model.js"
+import { buildCursorPage } from "../utils/cursorPagination.js"
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const boundedPage = (value) => Math.min(100_000, Math.max(1, Number.parseInt(value, 10) || 1));
+const boundedLimit = (value, fallback = 10) => Math.min(100, Math.max(1, Number.parseInt(value, 10) || fallback));
+const allowedSort = (value, fields, fallback) => {
+  if (typeof value !== "string") return fallback;
+  const parts = value.split(",").map((part) => part.trim());
+  if (!parts.length || parts.some((part) => !/^[-]?[a-zA-Z]+$/.test(part) || !fields.includes(part.replace(/^-/, "")))) return fallback;
+  return parts.join(" ");
+};
 
 
 
@@ -28,37 +43,38 @@ export const getAllUsers = async (req, res) => {
     const query = {};
 
     // Fuzzy search by name or email
-    if (search) {
+    if (typeof search === 'string' && search.trim()) {
+      const safeSearch = escapeRegex(search.trim().slice(0, 100));
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
     // Exact match filters (Admin dashboard dropdowns)
-    if (role) query.role = role;
+    if (['buyer', 'seller', 'admin'].includes(role)) query.role = role;
     if (isBlocked !== undefined) query.isBlocked = isBlocked === 'true';
     if (isVerified !== undefined) query.isVerified = isVerified === 'true';
     if (isApproved !== undefined) query.isApproved = isApproved === 'true';
 
     // 3. Mathematical preparation for Pagination
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    // 4. Format the sort parameter (e.g., "?sort=name,-createdAt" becomes "name -createdAt")
-    const sortBy = sort.split(',').join(' ');
+    const pageNumber = boundedPage(page);
+    const limitNumber = boundedLimit(limit, 10);
+    const sortBy = allowedSort(sort, ['createdAt', 'name', 'email', 'role'], '-createdAt');
+    const cursorPage = buildCursorPage({ filter: query, sortBy, page: pageNumber, cursor: req.query.cursor, direction: req.query.direction, limit: limitNumber });
 
     // 5. Execute DB calls in parallel (Cuts response time in half)
-    const [users, total] = await Promise.all([
-      User.find(query)
-        .select('-password -verificationToken -passwordResetToken') // SECURITY: Never send hashes to the frontend
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limitNumber)
-        .lean(), // PERFORMANCE: Converts massive Mongoose documents into lightweight JS objects
+    const [rawUsers, total] = await Promise.all([
+      User.find(cursorPage.filter)
+        .select('-password -verificationToken -passwordResetToken')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .lean(),
       User.countDocuments(query)
     ]);
+    const hasMore = cursorPage.hasMore(rawUsers);
+    const users = cursorPage.trim(rawUsers);
+    const cursors = cursorPage.cursors(users);
 
     // 6. Return a Dashboard-Ready Response
     return res.status(200).json({
@@ -72,10 +88,13 @@ export const getAllUsers = async (req, res) => {
         totalPages: Math.ceil(total / limitNumber),
         hasNextPage: pageNumber * limitNumber < total,
         hasPrevPage: pageNumber > 1,
+        previousCursor: pageNumber > 1 ? cursors.previousCursor : null,
+        nextCursor: hasMore ? cursors.nextCursor : null,
       }
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('Admin GetAllUsers Error:', error);
     return res.status(500).json({
       success: false,
@@ -197,15 +216,19 @@ export const deleteUser = async (req, res) => {
     // We must remove all database records tied to this user to prevent "ghost" data.
     // (Note: Adjust the field names 'owner' or 'user' based on your exact Property/Inquiry schema)
     
-    const [deletedProperties, deletedInquiries] = await Promise.all([
-      // If they are a seller, delete all properties they listed
-      Property.deleteMany({ owner: targetUserId }), 
-      
-      // If they are a buyer, delete all inquiries they submitted
-      Inquiry.deleteMany({ user: targetUserId })
+    const relatedChats = await Chat.find({
+      $or: [{ buyer: targetUserId }, { seller: targetUserId }],
+    }).select('_id').lean();
+    const relatedChatIds = relatedChats.map((chat) => chat._id);
+
+    const [deletedProperties, deletedInquiries, deletedWishlist, deletedChats, deletedMessages] = await Promise.all([
+      Property.deleteMany({ seller: targetUserId }),
+      Inquiry.deleteMany({ $or: [{ buyer: targetUserId }, { seller: targetUserId }] }),
+      Wishlist.deleteMany({ user: targetUserId }),
+      Chat.deleteMany({ $or: [{ buyer: targetUserId }, { seller: targetUserId }] }),
+      ChatMessage.deleteMany({ chat: { $in: relatedChatIds } }),
     ]);
 
-    // 5. Finally, delete the user account
     await User.findByIdAndDelete(targetUserId);
 
     // 6. Return a comprehensive success response
@@ -214,7 +237,10 @@ export const deleteUser = async (req, res) => {
       message: `User ${user.name} has been permanently deleted.`,
       metrics: {
         propertiesRemoved: deletedProperties.deletedCount,
-        inquiriesRemoved: deletedInquiries.deletedCount
+        inquiriesRemoved: deletedInquiries.deletedCount,
+        wishlistEntriesRemoved: deletedWishlist.deletedCount,
+        chatsRemoved: deletedChats.deletedCount,
+        messagesRemoved: deletedMessages.deletedCount,
       }
     });
 
@@ -262,18 +288,19 @@ export const getAllProperties = async (req, res) => {
     const query = {};
 
     // 1. Fuzzy Search across title and nested address fields
-    if (search) {
+    if (typeof search === 'string' && search.trim()) {
+      const safeSearch = escapeRegex(search.trim().slice(0, 100));
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { 'address.city': { $regex: search, $options: 'i' } },
-        { 'address.area': { $regex: search, $options: 'i' } }
+        { title: { $regex: safeSearch, $options: 'i' } },
+        { 'address.city': { $regex: safeSearch, $options: 'i' } },
+        { 'address.area': { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
     // 2. Top-Level Filters
     if (propertyType) query.propertyType = propertyType;
     if (status) query.status = status;
-    if (city) query['address.city'] = { $regex: city, $options: 'i' };
+    if (typeof city === 'string' && city.trim()) query['address.city'] = { $regex: escapeRegex(city.trim().slice(0, 100)), $options: 'i' };
     
     // By default, only show verified properties to public users unless specifically requested
     if (isVerified !== undefined) {
@@ -295,21 +322,23 @@ export const getAllProperties = async (req, res) => {
     if (furnished) query['features.furnished'] = furnished;
 
     // 5. Pagination & Sorting Math
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-    const skip = (pageNumber - 1) * limitNumber;
-    const sortBy = sort.split(',').join(' ');
+    const pageNumber = boundedPage(page);
+    const limitNumber = boundedLimit(limit, 12);
+    const sortBy = allowedSort(sort, ['createdAt', 'title', 'price', 'views', 'status'], '-createdAt');
+    const cursorPage = buildCursorPage({ filter: query, sortBy, page: pageNumber, cursor: req.query.cursor, direction: req.query.direction, limit: limitNumber });
 
     // 6. Execute Parallel Database Queries
-    const [properties, total] = await Promise.all([
-      Property.find(query)
-        .populate('seller', 'name email phone profileImage') // Mapped exactly to your 'seller' ref
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limitNumber)
+    const [rawProperties, total] = await Promise.all([
+      Property.find(cursorPage.filter)
+        .populate('seller', 'name email phone profileImage')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
         .lean(),
       Property.countDocuments(query)
     ]);
+    const hasMore = cursorPage.hasMore(rawProperties);
+    const properties = cursorPage.trim(rawProperties);
+    const cursors = cursorPage.cursors(properties);
 
     return res.status(200).json({
       success: true,
@@ -322,10 +351,13 @@ export const getAllProperties = async (req, res) => {
         totalPages: Math.ceil(total / limitNumber),
         hasNextPage: pageNumber * limitNumber < total,
         hasPrevPage: pageNumber > 1,
+        previousCursor: pageNumber > 1 ? cursors.previousCursor : null,
+        nextCursor: hasMore ? cursors.nextCursor : null,
       }
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('GetAllProperties Error:', error);
     if (error.name === 'CastError') {
       return res.status(400).json({ success: false, message: 'Invalid numeric value in search filters.' });
@@ -420,30 +452,28 @@ export const getAllInquiries = async (req, res) => {
     
     // Relation Filters (e.g., "?property=60d5ec49c... " to see all leads for one villa)
     if (property) query.property = property;
-    if (user) query.user = user; 
+    if (user) query.buyer = user;
 
     // 3. Mathematical preparation for Pagination
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    // 4. Format the sort parameter
-    const sortBy = sort.split(',').join(' ');
+    const pageNumber = boundedPage(page);
+    const limitNumber = boundedLimit(limit, 15);
+    const sortBy = allowedSort(sort, ['createdAt'], '-createdAt');
+    const cursorPage = buildCursorPage({ filter: query, sortBy, page: pageNumber, cursor: req.query.cursor, direction: req.query.direction, limit: limitNumber });
 
     // 5. Execute DB calls in parallel for maximum speed
-    const [inquiries, total] = await Promise.all([
-      Inquiry.find(query)
-        // Populate the property details so the admin knows WHAT they are inquiring about
-        .populate('property', 'title address price propertyType') 
-        // Populate the user details to get the contact info of the buyer
-        .populate('buyer', 'name email phone ') 
-        .populate('seller', 'name email phone ') 
-        .sort(sortBy)
-        .skip(skip)
-        .limit(limitNumber)
-        .lean(), // Convert to raw JSON for speed
+    const [rawInquiries, total] = await Promise.all([
+      Inquiry.find(cursorPage.filter)
+        .populate('property', 'title address price propertyType')
+        .populate('buyer', 'name email phone ')
+        .populate('seller', 'name email phone ')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .lean(),
       Inquiry.countDocuments(query)
     ]);
+    const hasMore = cursorPage.hasMore(rawInquiries);
+    const inquiries = cursorPage.trim(rawInquiries);
+    const cursors = cursorPage.cursors(inquiries);
 
     // 6. Return a highly structured response for the Admin Data Table
     return res.status(200).json({
@@ -457,10 +487,13 @@ export const getAllInquiries = async (req, res) => {
         totalPages: Math.ceil(total / limitNumber),
         hasNextPage: pageNumber * limitNumber < total,
         hasPrevPage: pageNumber > 1,
+        previousCursor: pageNumber > 1 ? cursors.previousCursor : null,
+        nextCursor: hasMore ? cursors.nextCursor : null,
       }
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('GetAllInquiries Error:', error);
 
     // Handle cases where the admin filters by a malformed Property ID or User ID
@@ -491,6 +524,7 @@ export const getDashboardAnalytics = async (req, res) => {
       totalUsers,
       totalProperties,
       totalInquiries,
+      pendingSellers,
       propertyStatusBreakdown,
       recentInquiries,
       recentProperties
@@ -499,6 +533,7 @@ export const getDashboardAnalytics = async (req, res) => {
       User.countDocuments(),
       Property.countDocuments(),
       Inquiry.countDocuments(),
+      User.countDocuments({ role: 'seller', isApproved: false }),
       
       // Advanced Aggregation: Group properties by their status (Available, Sold, Rented, Pending)
       Property.aggregate([
@@ -510,7 +545,7 @@ export const getDashboardAnalytics = async (req, res) => {
         .sort('-createdAt')
         .limit(5)
         .populate('property', 'title price address')
-        .populate('user', 'name email')
+        .populate('buyer', 'name email')
         .lean(),
 
       // Recent Activity Feed: Last 5 Added Properties
@@ -544,6 +579,7 @@ export const getDashboardAnalytics = async (req, res) => {
           totalUsers,
           totalProperties,
           totalInquiries,
+          pendingSellers,
         },
         charts: {
           propertyStatus: formattedPropertyStats,
@@ -581,20 +617,23 @@ export const getPendingSellers = async (req, res) => {
     };
 
     // 2. Pagination Math
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-    const skip = (pageNumber - 1) * limitNumber;
+    const pageNumber = boundedPage(page);
+    const limitNumber = boundedLimit(limit, 10);
+    const sortBy = allowedSort(sort, ['createdAt', 'name', 'email'], 'createdAt');
+    const cursorPage = buildCursorPage({ filter: query, sortBy, page: pageNumber, cursor: req.query.cursor, direction: req.query.direction, limit: limitNumber });
 
     // 3. Execute DB calls in parallel
-    const [pendingSellers, total] = await Promise.all([
-      User.find(query)
-        .select('name email phone createdAt isVerified') // Only fetch what the admin needs to review
-        .sort(sort)
-        .skip(skip)
-        .limit(limitNumber)
+    const [rawPendingSellers, total] = await Promise.all([
+      User.find(cursorPage.filter)
+        .select('name email phone createdAt isVerified')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
         .lean(),
       User.countDocuments(query)
     ]);
+    const hasMore = cursorPage.hasMore(rawPendingSellers);
+    const pendingSellers = cursorPage.trim(rawPendingSellers);
+    const cursors = cursorPage.cursors(pendingSellers);
 
     // 4. Return Dashboard Response
     return res.status(200).json({
@@ -608,10 +647,13 @@ export const getPendingSellers = async (req, res) => {
         totalPages: Math.ceil(total / limitNumber),
         hasNextPage: pageNumber * limitNumber < total,
         hasPrevPage: pageNumber > 1,
+        previousCursor: pageNumber > 1 ? cursors.previousCursor : null,
+        nextCursor: hasMore ? cursors.nextCursor : null,
       }
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('Get Pending Sellers Error:', error);
     return res.status(500).json({
       success: false,
@@ -673,5 +715,30 @@ export const approveSeller = async (req, res) => {
       success: false,
       message: 'Internal server error while approving seller account.',
     });
+  }
+};
+
+/** Approve a property so it can appear in public listings. */
+export const verifyProperty = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid property ID.' });
+    }
+
+    const property = await Property.findByIdAndUpdate(
+      id,
+      { $set: { isVerified: true } },
+      { new: true, runValidators: true },
+    ).populate('seller', 'name email');
+
+    if (!property) {
+      return res.status(404).json({ success: false, message: 'Property not found.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Property verified.', property });
+  } catch (error) {
+    console.error('Verify property error:', error);
+    return res.status(500).json({ success: false, message: 'Could not verify property.' });
   }
 };

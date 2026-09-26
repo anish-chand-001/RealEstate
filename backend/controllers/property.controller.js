@@ -3,6 +3,9 @@ import User from "../models/user.model.js";
 import Inquiry from "../models/inquiry.model.js";
 import { uploadImageToCloudinary } from "../utils/cloudinaryUpload.js";
 import jwt from "jsonwebtoken";
+import { readAuthCookie } from "../utils/authCookie.js";
+import { getPagination } from "../utils/pagination.js";
+import { buildCursorPage, cursorPaginationMetadata } from "../utils/cursorPagination.js";
 
 
 
@@ -36,9 +39,12 @@ export const getAllProperties = async (req, res) => {
 
     // 2. Keyword Search (Matches title or area)
     if (search) {
+      const safeSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       filter.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { "address.area": { $regex: search, $options: "i" } },
+        { title: { $regex: safeSearch, $options: "i" } },
+        { "address.area": { $regex: safeSearch, $options: "i" } },
+        { "address.city": { $regex: safeSearch, $options: "i" } },
+        { "address.state": { $regex: safeSearch, $options: "i" } },
       ];
     }
 
@@ -85,28 +91,44 @@ export const getAllProperties = async (req, res) => {
       }
     }
 
-    // 8. Execute Database Query
-    const properties = await Property.find(filter)
-      .sort(sortOption)
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit))
-      .populate("seller", "name email phone");
+    // Bound pagination values to avoid invalid and excessively large queries.
+    const pageNumber = Math.max(1, Number.parseInt(page, 10) || 1);
+    const limitNumber = Math.min(50, Math.max(1, Number.parseInt(limit, 10) || 10));
 
-    // 9. Get Total Count for Pagination
-    const totalProperties = await Property.countDocuments(filter);
+    const cursorPage = buildCursorPage({
+      filter,
+      sortBy: sortOption,
+      page: pageNumber,
+      cursor: req.query.cursor,
+      direction: req.query.direction,
+      limit: limitNumber,
+    });
+    const [rawProperties, totalProperties] = await Promise.all([
+      Property.find(cursorPage.filter)
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .populate("seller", "name email phone"),
+      Property.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawProperties);
+    const properties = cursorPage.trim(rawProperties);
+    const cursors = cursorPage.cursors(properties);
 
     res.status(200).json({
       success: true,
       properties,
       pagination: {
         totalProperties,
-        currentPage: Number(page),
-        totalPages: Math.ceil(totalProperties / Number(limit)),
-        hasNextPage: Number(page) * Number(limit) < totalProperties,
-        hasPrevPage: Number(page) > 1,
+        currentPage: pageNumber,
+        totalPages: Math.ceil(totalProperties / limitNumber),
+        hasNextPage: pageNumber * limitNumber < totalProperties,
+        hasPrevPage: pageNumber > 1,
+        previousCursor: pageNumber > 1 ? cursors.previousCursor : null,
+        nextCursor: hasMore ? cursors.nextCursor : null,
       },
     });
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error("Get all properties error:", error);
     res
       .status(500)
@@ -171,9 +193,9 @@ export const addProperty = async (req, res) => {
     });
 
     if (existingProperty) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "You have already listed a property with this title in this city." 
+      return res.status(400).json({
+        success: false,
+        message: "You have already listed a property with this title in this city."
       });
     }
     // ----------------------------------
@@ -212,9 +234,9 @@ export const addProperty = async (req, res) => {
   } catch (error) {
     // Handle MongoDB duplicate key error gracefully if hit concurrently
     if (error.code === 11000) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Duplicate submission detected. This property already exists." 
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate submission detected. This property already exists."
       });
     }
 
@@ -232,14 +254,23 @@ export const addProperty = async (req, res) => {
 
 export const getMyProperty = async (req, res) => {
   try {
-    const properties = await Property.find({
-      seller: req.user.id || req.user._id,
-    });
+    const filter = { seller: req.user.id || req.user._id };
+    const { page, limit } = getPagination(req.query);
+    const cursorPage = buildCursorPage({ filter, sortBy: { createdAt: -1 }, page, cursor: req.query.cursor, direction: req.query.direction, limit });
+    const [rawProperties, total] = await Promise.all([
+      Property.find(cursorPage.filter).sort(cursorPage.sort).limit(cursorPage.limit).lean(),
+      Property.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawProperties);
+    const properties = cursorPage.trim(rawProperties);
+    const cursors = cursorPage.cursors(properties);
     res.json({
       success: true,
       properties,
+      pagination: cursorPaginationMetadata({ page, limit, total, hasNextPage: page * limit < total, hasPrevPage: page > 1, ...cursors, ...(hasMore ? {} : { nextCursor: null }) }),
     });
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error("getMyProperty error:", error);
     res.status(500).json({ message: "Server Error : " + error.message });
   }
@@ -305,9 +336,24 @@ export const updateProperty = async (req, res) => {
     if (address) property.address = address; // Note: Ensure frontend sends the full address object
     if (features) property.features = features;
 
-    if (amenities) {
-      property.amenities =
-        typeof amenities === "string" ? JSON.parse(amenities) : amenities;
+    if (amenities !== undefined) {
+      if (Array.isArray(amenities)) {
+        property.amenities = amenities;
+      } else if (typeof amenities === "string") {
+        const value = amenities.trim();
+        if (!value) {
+          property.amenities = [];
+        } else {
+          try {
+            const parsedAmenities = JSON.parse(value);
+            property.amenities = Array.isArray(parsedAmenities)
+              ? parsedAmenities
+              : [String(parsedAmenities)];
+          } catch {
+            property.amenities = value.split(",").map((item) => item.trim()).filter(Boolean);
+          }
+        }
+      }
     }
 
     if (finalImages.length > 0) {
@@ -439,7 +485,7 @@ export const updatePropertyStatus = async (req, res) => {
 /**
  * @desc    Get single property details, track unique views (excluding the owner), and fetch similar listings
  * @route   GET /api/properties/:id
- * @access  Public (Optional Auth Supported via Bearer Token)
+ * @access  Public (Optional Auth Supported via HttpOnly session cookie)
  */
 export const getPropertyDetails = async (req, res) => {
   try {
@@ -456,22 +502,19 @@ export const getPropertyDetails = async (req, res) => {
       });
     }
 
-    // 2. Determine visitor ID (Fallback to IP, or extract from Bearer token if present)
+    // 2. Determine visitor ID (fall back to IP when no valid session cookie exists).
     let visitorId = req.ip;
-    const authHeader = req.headers.authorization;
-
-    if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = readAuthCookie(req.headers.cookie);
+    if (token) {
       try {
-        const token = authHeader.split(" ")[1];
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        visitorId = decoded.id; // Get ID from JWT payload (match your token structure, e.g., decoded.id or decoded._id)
-      } catch (error) {
-        // Token is invalid or expired; safely fall back to IP tracking
-        console.warn("Invalid token for view tracking, falling back to IP.");
+        visitorId = decoded.id;
+      } catch {
+        // Invalid or expired optional sessions safely fall back to IP tracking.
       }
     }
 
-    
+
     const sellerId = property.seller._id ? property.seller._id.toString() : property.seller.toString();
     const isOwnerChecking = visitorId === sellerId;
 
@@ -523,56 +566,39 @@ export const getSellerDashboard = async (req, res) => {
   try {
     const sellerId = req.user.id || req.user._id;
 
-    // 1. Fetch all properties belonging to this seller, sorted by newest first
-    const properties = await Property.find({ seller: sellerId }).sort({ createdAt: -1 });
+    const [propertyStats, properties, totalInquiries] = await Promise.all([
+      Property.aggregate([
+        { $match: { seller: sellerId } },
+        { $group: {
+          _id: null,
+          totalProperties: { $sum: 1 },
+          totalViews: { $sum: '$views' },
+          activeListings: { $sum: { $cond: [{ $eq: ['$status', 'Available'] }, 1, 0] } },
+          soldCount: { $sum: { $cond: [{ $eq: ['$status', 'Sold'] }, 1, 0] } },
+          rentedCount: { $sum: { $cond: [{ $eq: ['$status', 'Rented'] }, 1, 0] } },
+          pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] } },
+        } },
+      ]),
+      Property.find({ seller: sellerId }).sort({ createdAt: -1 }).limit(5).lean(),
+      Inquiry.countDocuments({ seller: sellerId }),
+    ]);
+    const stats = propertyStats[0] || {
+      totalProperties: 0, totalViews: 0, activeListings: 0,
+      soldCount: 0, rentedCount: 0, pendingCount: 0,
+    };
 
-    // 2. Extract all property IDs to query related inquiries
-    const propertyIds = properties.map((property) => property._id);
-
-    // 3. Count total inquiries associated with any of this seller's properties
-    const totalInquiries = await Inquiry.countDocuments({ property: { $in: propertyIds } });
-
-    // 4. Compute dashboard statistics & aggregations
-    const totalProperties = properties.length;
-    
-    let totalViews = 0;
-    let activeListings = 0;
-    let soldCount = 0;
-    let rentedCount = 0;
-    let pendingCount = 0;
-
-    properties.forEach((property) => {
-      totalViews += property.views || 0;
-      
-      switch (property.status) {
-        case 'Available':
-          activeListings++;
-          break;
-        case 'Sold':
-          soldCount++;
-          break;
-        case 'Rented':
-          rentedCount++;
-          break;
-        case 'Pending':
-          pendingCount++;
-          break;
-      }
-    });
-
-    // 5. Send structured dashboard data to frontend including totalInquiries
     res.status(200).json({
       success: true,
       stats: {
-        totalProperties,
-        totalViews,
-        totalInquiries, 
-        activeListings,
+        totalProperties: stats.totalProperties,
+        totalViews: stats.totalViews,
+        totalInquiries,
+        activeListings: stats.activeListings,
         statusBreakdown: {
-          available: activeListings,
-          sold: soldCount,
-          rented: rentedCount,
-          pending: pendingCount,
+          available: stats.activeListings,
+          sold: stats.soldCount,
+          rented: stats.rentedCount,
+          pending: stats.pendingCount,
         },
       },
       properties,
@@ -592,7 +618,7 @@ export const getSellerDashboard = async (req, res) => {
 export const getPropertyCount = async (req, res) => {
   try {
     const counts = await Property.aggregate([
-      { $match: { status: 'Available' } }, 
+      { $match: { status: 'Available' } },
       {
         $group: {
           _id: '$propertyType',

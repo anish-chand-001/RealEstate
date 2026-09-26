@@ -16,11 +16,11 @@ const options = {
     ],
     components: {
       securitySchemes: {
-        BearerAuth: {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          description: 'Enter your JWT token: Bearer <your_token>',
+        SessionCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'token',
+          description: 'HttpOnly session cookie issued by /api/auth/login',
         },
       },
     },

@@ -67,6 +67,13 @@ const userSchema = new mongoose.Schema(
   },
 );
 
+userSchema.index({ role: 1, isApproved: 1, createdAt: -1, _id: -1 });
+userSchema.index({ createdAt: -1, _id: -1 });
+userSchema.index({ createdAt: 1, _id: 1 });
+userSchema.index({ name: 1, _id: 1 });
+userSchema.index({ email: 1, _id: 1 });
+userSchema.index({ role: 1, _id: 1 });
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

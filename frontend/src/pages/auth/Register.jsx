@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { gsap } from 'gsap';
 import { FiUser, FiMail, FiLock, FiEye, FiEyeOff, FiArrowRight } from 'react-icons/fi';
@@ -17,7 +17,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   const navigate = useNavigate();
 
   // GSAP Refs
@@ -58,10 +58,10 @@ const Register = () => {
 
     try {
       // BACKEND CONNECTION POINT
-      const response = await axios.post(`${API_URL}/api/auth/register`, formData)
+      await axios.post(`${API_URL}/api/auth/register`, formData)
     navigate('/verify-email', { state: { email: formData.email } });
 
-    } catch (err) {
+    } catch {
       setError('Something went wrong. Please try again later.');
     } finally {
       setIsLoading(false);
@@ -74,19 +74,19 @@ const Register = () => {
 
   return (
     <div className="min-h-screen flex bg-white font-sans">
-      
+
       {/* LEFT SIDE: Image Panel (Hidden on Mobile) */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-gray-900 overflow-hidden">
         <div ref={imageRef} className="absolute inset-0 w-full h-full">
-          <img 
+          <img
             // Using a different high-quality interior image for the register page
-            src="https://images.unsplash.com/photo-1600607686527-6fb886090705?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80" 
-            alt="Luxury Interior" 
+            src="https://images.unsplash.com/photo-1600607686527-6fb886090705?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80"
+            alt="Luxury Interior"
             className="w-full h-full object-cover opacity-80"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent"></div>
         </div>
-        
+
         <div className="relative z-10 flex flex-col justify-end p-16 text-white w-full">
           <span className="inline-block py-1 px-3 rounded-full bg-white/20 backdrop-blur-md text-white font-semibold text-sm mb-6 border border-white/30 w-max">
             Join the Network
@@ -102,10 +102,10 @@ const Register = () => {
 
       {/* RIGHT SIDE: Form Panel */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 md:p-16 relative overflow-y-auto">
-        
+
         {/* Back to Home Link */}
-        <Link 
-          to="/" 
+        <Link
+          to="/"
           className="absolute top-8 left-8 sm:left-12 flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors font-medium z-10"
         >
           <BsHouseDoor className="text-xl" />
@@ -114,7 +114,7 @@ const Register = () => {
 
         <div className="w-full max-w-md mt-10 lg:mt-0">
           <div ref={formRef} className="flex flex-col gap-6">
-            
+
             {/* Header */}
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Create an account</h1>
@@ -130,7 +130,7 @@ const Register = () => {
 
             {/* Form */}
             <form onSubmit={handleRegister} className="flex flex-col gap-5">
-              
+
               {/* Role Selection */}
               <div className="flex flex-col gap-2 mb-2">
                 <label className="text-sm font-semibold text-gray-700">I want to...</label>
@@ -165,8 +165,8 @@ const Register = () => {
                 <label className="text-sm font-semibold text-gray-700">Full Name</label>
                 <div className="relative flex items-center bg-gray-50 rounded-xl border border-gray-200 focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
                   <FiUser className="absolute left-4 text-gray-400 text-lg" />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
@@ -182,8 +182,8 @@ const Register = () => {
                 <label className="text-sm font-semibold text-gray-700">Email Address</label>
                 <div className="relative flex items-center bg-gray-50 rounded-xl border border-gray-200 focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
                   <FiMail className="absolute left-4 text-gray-400 text-lg" />
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
@@ -199,8 +199,8 @@ const Register = () => {
                 <label className="text-sm font-semibold text-gray-700">Password</label>
                 <div className="relative flex items-center bg-gray-50 rounded-xl border border-gray-200 focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
                   <FiLock className="absolute left-4 text-gray-400 text-lg" />
-                  <input 
-                    type={showPassword ? "text" : "password"} 
+                  <input
+                    type={showPassword ? "text" : "password"}
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
@@ -209,7 +209,7 @@ const Register = () => {
                     minLength="8"
                     className="w-full bg-transparent border-none py-3.5 pl-11 pr-12 text-gray-900 focus:outline-none placeholder-gray-400"
                   />
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 text-gray-400 hover:text-gray-600 focus:outline-none"
@@ -220,8 +220,8 @@ const Register = () => {
               </div>
 
               {/* Submit Button */}
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isLoading}
                 className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-wait flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
               >
@@ -244,7 +244,7 @@ const Register = () => {
             </div>
 
             {/* Google Signup Button */}
-            <button 
+            <button
               type="button"
               onClick={handleGoogleSignup}
               className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-semibold py-3.5 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-colors"

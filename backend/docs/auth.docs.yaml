@@ -41,7 +41,7 @@ paths:
 
   /api/auth/login:
     post:
-      summary: Authenticate user & issue JWT token/cookie
+      summary: Authenticate user & issue an HttpOnly session cookie
       tags:
         - Auth
       requestBody:
@@ -167,7 +167,7 @@ paths:
       tags:
         - Auth
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Logout successful

@@ -9,11 +9,13 @@ const messageSchema = new mongoose.Schema(
     },
     text: {
       type: String,
-      required: true, 
+      trim: true,
+      default: '',
+      maxlength: 5000,
     },
     image: {
       type: String,
-      default: false, 
+      default: '',
     },
     createdAt: {
         type: Date,
@@ -39,13 +41,17 @@ export const chatSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    
-    messages: [messageSchema] 
+
+    messages: [messageSchema]
   },
   {
     timestamps: true
   }
 );
+
+chatSchema.index({ buyer: 1, updatedAt: -1, _id: -1 });
+chatSchema.index({ seller: 1, updatedAt: -1, _id: -1 });
+chatSchema.index({ property: 1, buyer: 1, seller: 1 });
 
 export const Chat = mongoose.model('Chat', chatSchema);
 

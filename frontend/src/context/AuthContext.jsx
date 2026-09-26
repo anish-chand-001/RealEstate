@@ -1,162 +1,79 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
-import axios from "axios";
-import API_URL from "../config.js";
+import { useCallback, useEffect, useState } from "react";
+import { AuthContext } from "./auth.context";
 import { useNavigate } from "react-router-dom";
-
-const AuthContext = createContext();
+import { authService, getErrorMessage } from "../services/auth.service";
+import { userService } from "../services/user.service";
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(
-    localStorage.getItem("token") || sessionStorage.getItem("token") || null,
-  );
-
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (token) {
-      // FIX: Changed to logical OR (||) instead of comma
-      const storedUser =
-        localStorage.getItem("user") || sessionStorage.getItem("user");
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+  const refreshUser = useCallback(async () => {
+    try {
+      const data = await userService.getProfile();
+      setUser(data.user);
+      return data.user;
+    } catch (error) {
+      setUser(null);
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        console.error("Error refreshing user details:", error);
       }
+      return null;
     }
+  }, []);
 
-    const interceptor = axios.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (
-          error.response &&
-          error.response.status === 403 &&
-          error.response.data.message.includes("blocked")
-        ) {
-          logout();
-        }
-        return Promise.reject(error);
-      },
-    );
-    return () => axios.interceptors.response.eject(interceptor);
-  }, [token]); // Added dependency array to prevent infinite loops
-
-  // =================================
-  // --- login
-  // ================================
+  useEffect(() => {
+    const clearInvalidSession = () => setUser(null);
+    window.addEventListener("auth:session-invalid", clearInvalidSession);
+    let active = true;
+    userService.getProfile()
+      .then((data) => { if (active) setUser(data.user); })
+      .catch(() => { if (active) setUser(null); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => {
+      active = false;
+      window.removeEventListener("auth:session-invalid", clearInvalidSession);
+    };
+  }, []);
 
   const login = async (email, password) => {
     try {
-      const res = await axios.post(`${API_URL}/api/auth/login`, {
-        email,
-        password,
-      });
-      const { token, user } = res.data;
-      setToken(token);
-      setUser(user);
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      return { success: true };
+      const data = await authService.login({ email, password });
+      setUser(data.user);
+      return { success: true, user: data.user };
     } catch (error) {
-      // FIX: changed err to error
-      return {
-        success: false,
-        message: error.response?.data?.message || "Login denied or failed",
-      };
+      return { success: false, message: getErrorMessage(error) };
     }
   };
 
-  // =================================
-  // --- register
-  // ================================
-
-  const register = async (name, email, password) => {
+  const register = async (formData) => {
     try {
-      const res = await axios.post(`${API_URL}/api/auth/register`, {
-        name,
-        email,
-        password,
-      });
-      const { token, user } = res.data;
-      setToken(token);
-      setUser(user);
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      return { success: true };
+      const data = await authService.register(formData);
+      return { success: true, data };
     } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || "Registration failed",
-      };
+      return { success: false, message: getErrorMessage(error) };
     }
   };
 
-  // =================================
-  // --- logout
-  // ================================
-
-  const logout = () => {
-    setToken(null);
+  const logout = async () => {
+    try { await authService.logout(); } catch { /* Clear client state even if offline. */ }
     setUser(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    navigate("/login"); // Adjust route as needed
-  };
-
-  // =================================
-  // --- Get the user Details
-  // ================================
-  const refreshUser = async () => {
-    if (!token) return;
-
-    try {
-    
-      const res = await axios.get(`${API_URL}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`, 
-        },
-      });
-
-      if (res.data.success) {
-        const updatedUser = res.data.user;
-        setUser(updatedUser);
-        const storage = localStorage.getItem("token")
-          ? localStorage
-          : sessionStorage;
-
-        storage.setItem("user", JSON.stringify(updatedUser));
-      }
-    } catch (error) {
-      console.error("Error refreshing user details:", error);
-
-      if (error.response && error.response.status === 401) {
-        logout();
-      }
-
-    }
+    navigate("/login");
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        setUser,
-        token,
-        setToken,
-        login,
-        register,
-        logout,
-        loading,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      setUser,
+      login,
+      register,
+      logout,
+      refreshUser,
+      loading,
+      isAuthenticated: !!user,
+    }}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);

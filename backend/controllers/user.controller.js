@@ -1,5 +1,7 @@
 import User from '../models/user.model.js';
 import { uploadImageToCloudinary } from '../utils/cloudinaryUpload.js';
+import { getPagination } from '../utils/pagination.js';
+import { buildCursorPage, cursorPaginationMetadata } from '../utils/cursorPagination.js';
 
 
 /**
@@ -95,9 +97,23 @@ export const updateUserProfile = async (req, res) => {
  */
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password'); // Exclude password from the response
-    res.status(200).json({ success: true, data: users });
+    const { page, limit } = getPagination(req.query);
+    const filter = {};
+    const cursorPage = buildCursorPage({ filter, sortBy: { createdAt: -1 }, page, cursor: req.query.cursor, direction: req.query.direction, limit });
+    const [rawUsers, total] = await Promise.all([
+      User.find(cursorPage.filter)
+        .select('-password -verificationToken -passwordResetToken -passwordResetExpires')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawUsers);
+    const users = cursorPage.trim(rawUsers);
+    const cursors = cursorPage.cursors(users);
+    res.status(200).json({ success: true, data: users, pagination: cursorPaginationMetadata({ page, limit, total, hasNextPage: page * limit < total, hasPrevPage: page > 1, ...cursors, ...(hasMore ? {} : { nextCursor: null }) }) });
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('Error fetching users:', error);
     res.status(500).json({ success: false, message: 'Server Error' });
   }

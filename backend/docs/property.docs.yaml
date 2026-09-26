@@ -81,7 +81,7 @@ paths:
       tags:
         - Properties
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       requestBody:
         required: true
         content:
@@ -174,7 +174,7 @@ paths:
       tags:
         - Properties (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully retrieved seller dashboard analytics and property items
@@ -191,7 +191,7 @@ paths:
       tags:
         - Properties (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully fetched seller's properties array
@@ -227,7 +227,7 @@ paths:
       tags:
         - Properties (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id
@@ -267,7 +267,7 @@ paths:
       tags:
         - Properties (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id
@@ -291,7 +291,7 @@ paths:
       tags:
         - Properties (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id
@@ -335,7 +335,7 @@ paths:
       tags:
         - Inquiries
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       requestBody:
         required: true
         content:
@@ -374,7 +374,7 @@ paths:
       tags:
         - Inquiries (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       responses:
         '200':
           description: Successfully fetched seller inquiries array
@@ -391,7 +391,7 @@ paths:
       tags:
         - Inquiries (Seller)
       security:
-        - BearerAuth: []
+        - SessionCookie: []
       parameters:
         - in: path
           name: id

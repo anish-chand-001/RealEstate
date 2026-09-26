@@ -1,5 +1,15 @@
 // utils/emailTemplates.js
 
+// Escape user-controlled values before inserting them into HTML email templates.
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+}[character]));
+
+
 export const generateVerificationEmail = (name, otp) => {
   return `
   <!DOCTYPE html>
@@ -81,11 +91,11 @@ export const generateVerificationEmail = (name, otp) => {
       
       <!-- Content -->
       <div class="content">
-        <div class="greeting">Hello ${name},</div>
+        <div class="greeting">Hello ${escapeHtml(name)},</div>
         <p>Thank you for registering. To complete your account setup and verify your email address, please use the verification code below:</p>
         
         <div class="otp-box">
-          <p class="otp-code">${otp}</p>
+          <p class="otp-code">${escapeHtml(otp)}</p>
         </div>
         
         <p>This code will expire in 15 minutes. If you did not request this verification, please ignore this email.</p>
@@ -191,11 +201,11 @@ export const generatePasswordResetEmail = (name, resetUrl) => {
       
       <!-- Content -->
       <div class="content">
-        <div class="greeting">Hello ${name},</div>
+        <div class="greeting">Hello ${escapeHtml(name)},</div>
         <p>You recently requested to reset the password for your account. Click the button below to securely set a new password:</p>
         
         <div class="btn-container">
-          <a href="${resetUrl}" class="btn">Reset My Password</a>
+          <a href="${escapeHtml(resetUrl)}" class="btn">Reset My Password</a>
         </div>
         
         <p><strong>This link will expire in 1 hour.</strong> If you did not request a password reset, please ignore this email and your account will remain secure.</p>
@@ -203,7 +213,7 @@ export const generatePasswordResetEmail = (name, resetUrl) => {
         <!-- Fallback for strict email clients -->
         <div class="fallback-link">
           <p>If the button above doesn't work, copy and paste the following URL into your web browser:</p>
-          <a href="${resetUrl}" style="color: #2563eb;">${resetUrl}</a>
+          <a href="${escapeHtml(resetUrl)}" style="color: #2563eb;">${escapeHtml(resetUrl)}</a>
         </div>
       </div>
       
@@ -254,15 +264,15 @@ export const generateAdminContactNotificationEmail = (contactData) => {
         <p>You have received a new inquiry from the Real Estate Platform. Here are the details:</p>
         
         <table class="data-table">
-          <tr><td class="label">Name</td><td class="value">${name}</td></tr>
-          <tr><td class="label">Email</td><td class="value"><a href="mailto:${email}" style="color: #2563eb;">${email}</a></td></tr>
-          <tr><td class="label">Phone</td><td class="value"><a href="tel:${phone}" style="color: #2563eb;">${phone}</a></td></tr>
-          <tr><td class="label">Role</td><td class="value" style="text-transform: capitalize;">${role || 'Buyer'}</td></tr>
-          <tr><td class="label">Received</td><td class="value">${date}</td></tr>
+          <tr><td class="label">Name</td><td class="value">${escapeHtml(name)}</td></tr>
+          <tr><td class="label">Email</td><td class="value"><a href="mailto:${escapeHtml(email)}" style="color: #2563eb;">${escapeHtml(email)}</a></td></tr>
+          <tr><td class="label">Phone</td><td class="value"><a href="tel:${escapeHtml(phone)}" style="color: #2563eb;">${escapeHtml(phone)}</a></td></tr>
+          <tr><td class="label">Role</td><td class="value" style="text-transform: capitalize;">${escapeHtml(role || 'Buyer')}</td></tr>
+          <tr><td class="label">Received</td><td class="value">${escapeHtml(date)}</td></tr>
         </table>
         
         <div class="label" style="margin-top: 24px;">Message:</div>
-        <div class="message-box">${message}</div>
+        <div class="message-box">${escapeHtml(message)}</div>
       </div>
       <div class="footer">
         <p>This is an automated notification from your platform.</p>

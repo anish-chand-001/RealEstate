@@ -14,13 +14,19 @@ import chatRouter from './routes/chat.routes.js';
 
 const app = express();
 
+// Configure only the known proxy hop count so IP-based throttling uses the client IP safely.
+const trustedProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || "0", 10);
+if (Number.isInteger(trustedProxyHops) && trustedProxyHops >= 0) {
+  app.set("trust proxy", trustedProxyHops);
+}
+
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 // Swagger UI Route
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -42,10 +48,11 @@ app.get('/health', (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
+  const status = err.status || (err.name === 'MulterError' ? 400 : 500);
+  console.error(err);
+  res.status(status).json({
     success: false,
-    error: err.message || 'Server Error',
+    error: status >= 500 ? 'Server Error' : err.message,
   });
 });
 

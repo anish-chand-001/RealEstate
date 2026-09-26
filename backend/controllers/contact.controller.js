@@ -1,6 +1,8 @@
 import Contact from '../models/contact.model.js'; // Adjust path if needed
 import sendEmail from '../utils/sendEmail.js';
 import { generateAdminContactNotificationEmail } from '../utils/emailTemplates.js';
+import { getPagination } from '../utils/pagination.js';
+import { buildCursorPage, cursorPaginationMetadata } from '../utils/cursorPagination.js';
 
 /**
  * @desc    Create a new contact inquiry and notify admin
@@ -88,16 +90,25 @@ export const getAllContacts = async (req, res) => {
       filter.status = req.query.status;
     }
 
-    const contacts = await Contact.find(filter).sort({ createdAt: -1 });
+    const { page, limit } = getPagination(req.query);
+    const cursorPage = buildCursorPage({ filter, sortBy: { createdAt: -1 }, page, cursor: req.query.cursor, direction: req.query.direction, limit });
+    const [rawContacts, total] = await Promise.all([
+      Contact.find(cursorPage.filter).sort(cursorPage.sort).limit(cursorPage.limit).lean(),
+      Contact.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawContacts);
+    const contacts = cursorPage.trim(rawContacts);
+    const cursors = cursorPage.cursors(contacts);
 
- 
     return res.status(200).json({
       success: true,
-      count: contacts.length,
+      count: total,
       data: contacts,
+      pagination: cursorPaginationMetadata({ page, limit, total, hasNextPage: page * limit < total, hasPrevPage: page > 1, ...cursors, ...(hasMore ? {} : { nextCursor: null }) }),
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error('Get All Contacts Error:', error);
     
     return res.status(500).json({

@@ -1,5 +1,7 @@
 import Inquiry from '../models/inquiry.model.js'
 import Property from '../models/property.model.js'
+import { getPagination } from '../utils/pagination.js'
+import { buildCursorPage, cursorPaginationMetadata } from '../utils/cursorPagination.js'
 
 
 /**
@@ -70,24 +72,31 @@ export const getSellerInquiries = async (req, res) => {
   try {
     const sellerId = req.user.id || req.user._id;
 
-    // 1. Find all property IDs belonging to this seller
-    const sellerProperties = await Property.find({ seller: sellerId }).select('_id');
-    const propertyIds = sellerProperties.map((property) => property._id);
+    const filter = { seller: sellerId };
+    const { page, limit } = getPagination(req.query);
+    const cursorPage = buildCursorPage({ filter, sortBy: { createdAt: -1 }, page, cursor: req.query.cursor, direction: req.query.direction, limit });
+    const [rawInquiries, total] = await Promise.all([
+      Inquiry.find(cursorPage.filter)
+        .populate('buyer', 'name email phone profileImage')
+        .populate('property', 'title price address images')
+        .sort(cursorPage.sort)
+        .limit(cursorPage.limit)
+        .lean(),
+      Inquiry.countDocuments(filter),
+    ]);
+    const hasMore = cursorPage.hasMore(rawInquiries);
+    const inquiries = cursorPage.trim(rawInquiries);
+    const cursors = cursorPage.cursors(inquiries);
 
-    // 2. Find all inquiries linked to those properties
-    const inquiries = await Inquiry.find({ property: { $in: propertyIds } })
-      .populate('buyer', 'name email phone profileImage')
-      .populate('property', 'title price address images')
-      .sort({ createdAt: -1 }); // Newest inquiries first
-
-    // 3. Send response
     res.status(200).json({
       success: true,
-      count: inquiries.length,
+      count: total,
       inquiries,
+      pagination: cursorPaginationMetadata({ page, limit, total, hasNextPage: page * limit < total, hasPrevPage: page > 1, ...cursors, ...(hasMore ? {} : { nextCursor: null }) }),
     });
 
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ success: false, message: error.message });
     console.error("Get seller inquiries error:", error);
     res.status(500).json({ 
       success: false, 

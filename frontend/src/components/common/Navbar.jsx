@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { FiMenu, FiX } from "react-icons/fi";
 import { BsHouseDoor } from "react-icons/bs";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from '../../hooks/useAuth';
 import { Link, useNavigate, useLocation } from "react-router-dom";
+
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -25,19 +26,19 @@ const Navbar = () => {
     if (user && user?.role == "buyer") {
       links.push(
         { name: "Wishlist", href: "/wishlist" },
-        { name: "Messages", href: "/chat-messages" },
+        { name: "Messages", href: "/chat" },
       );
     }
 
     if (user && user?.role === "seller") {
       links.push(
-        { name: "My Listings", href: "/my-listings" },
-        { name: "Messages", href: "/chat-messages" },
+        { name: "My Listings", href: "/seller/dashboard" },
+        { name: "Messages", href: "/chat" },
       );
     }
 
     if (user && user?.role === "admin") {
-      links.push({ name: "Admin Dashboard", href: "/admin-dashboard" });
+      links.push({ name: "Admin Dashboard", href: "/admin/dashboard" });
     }
 
     // Contact is always visible at the end
@@ -207,7 +208,7 @@ const Navbar = () => {
                   onClick={() => setIsOpen(false)}
                   className="w-full bg-indigo-50 text-indigo-600 px-5 py-3.5 rounded-xl font-medium text-center hover:bg-indigo-100 transition-colors duration-300"
                 >
-                  Login 
+                  Login
                 </Link>
 
                 <Link

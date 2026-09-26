@@ -72,6 +72,14 @@ const propertySchema = new mongoose.Schema(
 
 
 propertySchema.index({ 'address.city': 1, propertyType: 1 });
+propertySchema.index({ status: 1, isVerified: 1, createdAt: -1, _id: -1 });
+propertySchema.index({ status: 1, isVerified: 1, price: 1 });
+propertySchema.index({ status: 1, isVerified: 1, 'address.city': 1, propertyType: 1, price: 1 });
+propertySchema.index({ seller: 1, createdAt: -1, _id: -1 });
+propertySchema.index({ status: 1, isVerified: 1, createdAt: -1, _id: -1 });
+propertySchema.index({ status: 1, isVerified: 1, price: 1, _id: 1 });
+propertySchema.index({ status: 1, isVerified: 1, price: -1, _id: -1 });
+propertySchema.index({ status: 1, isVerified: 1, views: -1, _id: -1 });
 propertySchema.index({ seller: 1, title: 1, 'address.city': 1 }, { unique: true });
 
 
